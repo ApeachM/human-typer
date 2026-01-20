@@ -37,6 +37,82 @@ def type_char(char: str) -> None:
         pyautogui.hotkey('ctrl', 'v')
 
 
+def get_base_delay(min_delay: float, max_delay: float) -> float:
+    """Get base delay using exponential distribution."""
+    delay_range = max_delay - min_delay
+    if delay_range <= 0:
+        return min_delay
+
+    extra_delay = random.expovariate(3.0 / delay_range)
+    return min(min_delay + extra_delay, max_delay)
+
+
+def get_char_modifier(char: str, prev_char: str) -> float:
+    """Get delay modifier based on character type."""
+    # Repeated character - faster
+    if char.lower() == prev_char.lower() and char.isalnum():
+        return config.MODIFIER_REPEATED
+
+    if char == '\n':
+        return config.MODIFIER_NEWLINE
+    if char == ' ':
+        return config.MODIFIER_SPACE
+    if char in config.SPECIAL_CHARS:
+        return config.MODIFIER_SPECIAL
+    if char in config.PUNCTUATION_CHARS:
+        return config.MODIFIER_PUNCTUATION
+    if char.isdigit():
+        return config.MODIFIER_DIGIT
+
+    modifier = 1.0
+    if char.isupper():
+        modifier *= config.MODIFIER_CAPITAL
+    if char.lower() in config.COMMON_CHARS[:10]:
+        modifier *= config.MODIFIER_COMMON
+
+    return modifier
+
+
+def get_typo_char(char: str) -> str | None:
+    """Get a typo character (adjacent key)."""
+    lower_char = char.lower()
+    if lower_char in config.ADJACENT_KEYS:
+        adjacent = config.ADJACENT_KEYS[lower_char]
+        typo = random.choice(adjacent)
+        return typo.upper() if char.isupper() else typo
+    return None
+
+
+def correct_typos(typo_buffer: list[tuple[str, str]], min_delay: float, max_delay: float) -> None:
+    """Correct all buffered typos at once (backspace all, then retype correct).
+
+    Args:
+        typo_buffer: List of (typed_wrong, correct_char) tuples
+        min_delay: Min delay for timing
+        max_delay: Max delay for timing
+    """
+    if not typo_buffer:
+        return
+
+    # Pause before realizing the mistake
+    time.sleep(config.TYPO_CORRECTION_DELAY)
+
+    # Backspace for each typo
+    for _ in typo_buffer:
+        pyautogui.press('backspace')
+        time.sleep(get_base_delay(min_delay, max_delay))
+
+    # Small pause after deleting
+    time.sleep(get_base_delay(min_delay, max_delay) * 0.5)
+
+    # Retype correct characters
+    for _, correct_char in typo_buffer:
+        type_char(correct_char)
+        time.sleep(get_base_delay(min_delay, max_delay) * 0.8)
+
+    typo_buffer.clear()
+
+
 def list_windows(quiet: bool = False) -> list:
     """List all available windows.
 
@@ -113,16 +189,69 @@ def human_type(text: str, min_delay: float, max_delay: float, quiet: bool = Fals
         quiet: Suppress progress output
     """
     total = len(text)
+    prev_char = ''
+    typo_streak = 0.0  # Probability boost for consecutive typos
+    typo_buffer: list[tuple[str, str]] = []  # [(typed_wrong, correct), ...]
+    # Rhythm: typing speed drifts over time
+    rhythm = 1.0
+    rhythm_direction = random.choice([-1, 1])
 
     for i, char in enumerate(text):
-        type_char(char)
+        # Decide whether to make a typo (considering streak)
+        effective_probability = config.TYPO_PROBABILITY + typo_streak
+        should_typo = char.isalnum() and random.random() < effective_probability
+
+        if should_typo:
+            # Try to make a typo
+            typo_char = get_typo_char(char)
+            if typo_char:
+                type_char(typo_char)
+                typo_buffer.append((typo_char, char))
+                typo_streak = config.TYPO_STREAK_PROBABILITY
+            else:
+                # No adjacent key, type normally
+                type_char(char)
+                typo_streak *= config.TYPO_STREAK_DECAY
+        else:
+            # Not making typo - correct any buffered typos first
+            if typo_buffer:
+                correct_typos(typo_buffer, min_delay, max_delay)
+            type_char(char)
+            typo_streak *= config.TYPO_STREAK_DECAY
+
+        if typo_streak < 0.01:
+            typo_streak = 0.0
 
         if not quiet:
             percent = int((i + 1) / total * 100)
             print(f"\rProgress: {i + 1}/{total} ({percent}%)", end="", flush=True)
 
-        delay = random.uniform(min_delay, max_delay)
-        time.sleep(delay)
+        # Character-specific delay with rhythm
+        base_delay = get_base_delay(min_delay, max_delay)
+        modifier = get_char_modifier(char, prev_char)
+        time.sleep(base_delay * modifier * rhythm)
+
+        # Update rhythm for natural speed variation
+        if random.random() < config.RHYTHM_CHANGE_PROBABILITY:
+            rhythm_direction *= -1
+        rhythm += rhythm_direction * config.RHYTHM_DRIFT_RATE * random.random()
+        if rhythm <= config.RHYTHM_MIN:
+            rhythm = config.RHYTHM_MIN
+            rhythm_direction = 1
+        elif rhythm >= config.RHYTHM_MAX:
+            rhythm = config.RHYTHM_MAX
+            rhythm_direction = -1
+
+        # Burst typing - extra pause at word boundaries
+        if char == ' ':
+            pause = random.uniform(config.BURST_WORD_PAUSE_MIN, config.BURST_WORD_PAUSE_MAX)
+            time.sleep(pause)
+
+        prev_char = char
+
+    # Correct any remaining typos at the end
+    if typo_buffer:
+        correct_typos(typo_buffer, min_delay, max_delay)
 
     if not quiet:
         print("\nDone!")
