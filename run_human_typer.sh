@@ -73,8 +73,8 @@ python3 -c "import pyperclip" 2>/dev/null || DEPS_INSTALLED=false
 
 if [ "$DEPS_INSTALLED" = false ]; then
     echo -e "${YELLOW}Installing dependencies...${NC}"
-    pip install --upgrade pip -q
-    pip install PyQt5 pyautogui pyperclip -q
+    python3 -m pip install --upgrade pip -q
+    python3 -m pip install PyQt5 pyautogui pyperclip -q
 
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: Failed to install dependencies${NC}"

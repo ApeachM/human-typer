@@ -116,8 +116,8 @@ if %errorlevel% neq 0 (
 
 if "!DEPS_INSTALLED!"=="false" (
     echo Installing dependencies...
-    pip install --upgrade pip -q
-    pip install PyQt5 pyautogui pyperclip -q
+    python -m pip install --upgrade pip -q
+    python -m pip install PyQt5 pyautogui pyperclip -q
     if !errorlevel! neq 0 (
         echo Error: Failed to install dependencies
         call deactivate
