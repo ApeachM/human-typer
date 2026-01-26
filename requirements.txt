@@ -1,3 +1,5 @@
 PyQt5>=5.15.0
 pyautogui>=0.9.50
 pyperclip>=1.8.0
+pynput>=1.7.6
+pychrome>=0.2.4

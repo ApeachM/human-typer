@@ -13,9 +13,9 @@ class Config:
     WINDOW_MIN_HEIGHT: int = 400
 
     # Typing speed defaults (milliseconds)
-    # Base delay for normal characters (~100-150 WPM feel)
-    DEFAULT_MIN_DELAY_MS: int = 15
-    DEFAULT_MAX_DELAY_MS: int = 70
+    # Optimized for HTML5 RDP/VNC (e.g., Pulse Secure, OSM portal)
+    DEFAULT_MIN_DELAY_MS: int = 40
+    DEFAULT_MAX_DELAY_MS: int = 120
 
     # Delay ranges (UI slider bounds)
     MIN_DELAY_RANGE: tuple = (1, 500)

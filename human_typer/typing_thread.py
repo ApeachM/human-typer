@@ -6,13 +6,17 @@ import time
 from PyQt5.QtCore import QThread, pyqtSignal
 import pyautogui
 import pyperclip
+from pynput.keyboard import Controller, Key
 
 from .config import config
 
 
-# Configure pyautogui
+# Configure pyautogui (still used for window detection)
 pyautogui.FAILSAFE = config.FAILSAFE_ENABLED
 pyautogui.PAUSE = config.PAUSE_BETWEEN_ACTIONS
+
+# pynput keyboard controller for precise key control
+keyboard = Controller()
 
 
 class TypingThread(QThread):
@@ -61,22 +65,63 @@ class TypingThread(QThread):
         return ord(char) < 128
 
     def _type_char(self, char: str) -> None:
-        """Type a single character using appropriate method.
+        """Type a single character using pynput for precise control.
 
         Args:
             char: The character to type
         """
         if char == '\n':
-            pyautogui.press('enter')
+            keyboard.press(Key.enter)
+            keyboard.release(Key.enter)
+            return
         elif char == '\t':
-            pyautogui.press('tab')
-        elif self._is_ascii(char):
-            # Use small interval for reliable Shift key handling
-            pyautogui.write(char, interval=0.01)
-        else:
+            keyboard.press(Key.tab)
+            keyboard.release(Key.tab)
+            return
+        elif not self._is_ascii(char):
             # Non-ASCII (Korean, emoji, etc.) - use clipboard
             pyperclip.copy(char)
-            pyautogui.hotkey('ctrl', 'v')
+            keyboard.press(Key.ctrl_l)
+            keyboard.press('v')
+            keyboard.release('v')
+            keyboard.release(Key.ctrl_l)
+            return
+
+        # ASCII character - pynput provides precise timing control
+        # Map special characters to their base key + shift
+        shift_chars = {
+            '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+            '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+            '_': '-', '+': '=', '{': '[', '}': ']', '|': '\\',
+            ':': ';', '"': "'", '<': ',', '>': '.', '?': '/',
+            '~': '`'
+        }
+
+        if char.isupper():
+            # Capital letter - HTML5 RDP/VNC needs significant delay
+            keyboard.press(Key.shift)
+            time.sleep(0.05)  # HTML5 remote desktop needs extra time
+            keyboard.press(char.lower())
+            time.sleep(0.02)
+            keyboard.release(char.lower())
+            time.sleep(0.02)
+            keyboard.release(Key.shift)
+            time.sleep(0.01)  # Stabilization delay
+        elif char in shift_chars:
+            # Special character - HTML5 RDP/VNC needs significant delay
+            keyboard.press(Key.shift)
+            time.sleep(0.05)  # HTML5 remote desktop needs extra time
+            keyboard.press(shift_chars[char])
+            time.sleep(0.02)
+            keyboard.release(shift_chars[char])
+            time.sleep(0.02)
+            keyboard.release(Key.shift)
+            time.sleep(0.01)  # Stabilization delay
+        else:
+            # Normal character (lowercase, digit, space, etc.)
+            keyboard.press(char)
+            time.sleep(0.01)
+            keyboard.release(char)
 
     def _get_char_modifier(self, char: str) -> float:
         """Get delay modifier based on character type.
@@ -178,6 +223,12 @@ class TypingThread(QThread):
 
     def run(self) -> None:
         """Execute the typing process."""
+        # Press ESC before starting to ensure clean state
+        if self.start_pos == 0:  # Only on fresh start, not on resume
+            keyboard.press(Key.esc)
+            keyboard.release(Key.esc)
+            time.sleep(0.1)  # Wait for ESC to process
+
         total = len(self.text)
 
         for i in range(self.start_pos, total):
