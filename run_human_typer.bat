@@ -97,27 +97,20 @@ REM Activate virtual environment
 call "%VENV_DIR%\Scripts\activate.bat"
 
 REM Check and install dependencies
+set DEPS_INSTALLED=true
 python -c "import PyQt5" >nul 2>&1
-if %errorlevel% neq 0 (
-    set DEPS_INSTALLED=false
-) else (
-    python -c "import pyautogui" >nul 2>&1
-    if %errorlevel% neq 0 (
-        set DEPS_INSTALLED=false
-    ) else (
-        python -c "import pyperclip" >nul 2>&1
-        if %errorlevel% neq 0 (
-            set DEPS_INSTALLED=false
-        ) else (
-            set DEPS_INSTALLED=true
-        )
-    )
-)
+if %errorlevel% neq 0 set DEPS_INSTALLED=false
+python -c "import pyautogui" >nul 2>&1
+if %errorlevel% neq 0 set DEPS_INSTALLED=false
+python -c "import pyperclip" >nul 2>&1
+if %errorlevel% neq 0 set DEPS_INSTALLED=false
+python -c "import pynput" >nul 2>&1
+if %errorlevel% neq 0 set DEPS_INSTALLED=false
 
 if "!DEPS_INSTALLED!"=="false" (
     echo Installing dependencies...
     python -m pip install --upgrade pip -q
-    python -m pip install PyQt5 pyautogui pyperclip -q
+    python -m pip install PyQt5 pyautogui pyperclip pynput -q
     if !errorlevel! neq 0 (
         echo Error: Failed to install dependencies
         call deactivate
@@ -131,8 +124,15 @@ REM Run the tool
 echo Starting Human-like Typing Tool...
 echo.
 python "%PYTHON_SCRIPT%"
+set EXIT_CODE=!errorlevel!
 
 REM Deactivate virtual environment
 call deactivate
+
+if !EXIT_CODE! neq 0 (
+    echo.
+    echo Program exited with error code !EXIT_CODE!
+    pause
+)
 
 endlocal
