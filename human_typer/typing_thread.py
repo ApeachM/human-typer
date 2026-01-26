@@ -47,8 +47,6 @@ class TypingThread(QThread):
         self._stop_flag = False
         self._current_pos = start_pos
         self._prev_char = ''
-        self._typo_streak = 0.0  # Current streak probability boost
-        self._typo_buffer: list[tuple[str, str]] = []  # [(typed_wrong, correct), ...]
         # Rhythm: typing speed drifts over time (like human attention/focus)
         self._rhythm = 1.0  # Current rhythm multiplier
         self._rhythm_direction = random.choice([-1, 1])  # Drifting faster or slower
@@ -73,7 +71,8 @@ class TypingThread(QThread):
         elif char == '\t':
             pyautogui.press('tab')
         elif self._is_ascii(char):
-            pyautogui.write(char, interval=0)
+            # Use small interval for reliable Shift key handling
+            pyautogui.write(char, interval=0.01)
         else:
             # Non-ASCII (Korean, emoji, etc.) - use clipboard
             pyperclip.copy(char)
@@ -163,92 +162,6 @@ class TypingThread(QThread):
         modifier = self._get_char_modifier(char)
         return base_delay * modifier * self._rhythm
 
-    def _should_make_typo(self, char: str) -> bool:
-        """Determine if a typo should occur for this character.
-
-        Considers both base probability and streak probability for realistic
-        consecutive typos when fingers are out of position.
-        """
-        # Only make typos on alphanumeric characters
-        if not char.isalnum():
-            return False
-
-        # Combined probability: base + streak boost
-        effective_probability = config.TYPO_PROBABILITY + self._typo_streak
-        return random.random() < effective_probability
-
-    def _update_typo_streak(self, made_typo: bool) -> None:
-        """Update typo streak probability after each character.
-
-        Args:
-            made_typo: Whether a typo was made on this character
-        """
-        if made_typo:
-            # Start or boost the streak
-            self._typo_streak = config.TYPO_STREAK_PROBABILITY
-        else:
-            # Decay the streak
-            self._typo_streak *= config.TYPO_STREAK_DECAY
-            # Reset if too small
-            if self._typo_streak < 0.01:
-                self._typo_streak = 0.0
-
-    def _get_typo_char(self, char: str) -> str | None:
-        """Get a typo character (adjacent key).
-
-        Args:
-            char: The intended character
-
-        Returns:
-            Adjacent key character, or None if not available
-        """
-        lower_char = char.lower()
-        if lower_char in config.ADJACENT_KEYS:
-            adjacent = config.ADJACENT_KEYS[lower_char]
-            typo = random.choice(adjacent)
-            # Preserve case
-            return typo.upper() if char.isupper() else typo
-        return None
-
-    def _type_typo_char(self, char: str) -> bool:
-        """Type a wrong character and buffer for later correction.
-
-        Args:
-            char: The correct character (will type wrong one instead)
-
-        Returns:
-            True if typo was made, False if no adjacent key found
-        """
-        typo_char = self._get_typo_char(char)
-        if typo_char:
-            self._type_char(typo_char)
-            self._typo_buffer.append((typo_char, char))
-            return True
-        return False
-
-    def _correct_typos(self) -> None:
-        """Correct all buffered typos at once (backspace all, then retype correct)."""
-        if not self._typo_buffer:
-            return
-
-        # Pause before realizing the mistake
-        time.sleep(config.TYPO_CORRECTION_DELAY)
-
-        # Backspace for each typo
-        for _ in self._typo_buffer:
-            pyautogui.press('backspace')
-            time.sleep(self._get_base_delay())
-
-        # Small pause after deleting
-        time.sleep(self._get_base_delay() * 0.5)
-
-        # Retype correct characters
-        for _, correct_char in self._typo_buffer:
-            self._type_char(correct_char)
-            time.sleep(self._get_base_delay() * 0.8)
-
-        self._typo_buffer.clear()
-
     def _add_burst_pause(self, char: str) -> None:
         """Add extra pause at word boundaries for burst typing effect.
 
@@ -276,22 +189,8 @@ class TypingThread(QThread):
 
             char = self.text[i]
 
-            # Decide whether to make a typo
-            should_typo = self._should_make_typo(char)
-
-            if should_typo:
-                # Try to make a typo
-                made_typo = self._type_typo_char(char)
-                if not made_typo:
-                    # No adjacent key, type normally
-                    self._type_char(char)
-                self._update_typo_streak(made_typo)
-            else:
-                # Not making typo - correct any buffered typos first
-                if self._typo_buffer:
-                    self._correct_typos()
-                self._type_char(char)
-                self._update_typo_streak(False)
+            # Type the character
+            self._type_char(char)
 
             self.char_typed.emit(char)
             self.progress.emit(i + 1, total)
@@ -307,9 +206,5 @@ class TypingThread(QThread):
 
             # Update previous character for next iteration
             self._prev_char = char
-
-        # Correct any remaining typos at the end
-        if self._typo_buffer:
-            self._correct_typos()
 
         self.finished_typing.emit()

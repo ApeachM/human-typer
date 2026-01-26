@@ -56,7 +56,7 @@ class Config:
     RHYTHM_CHANGE_PROBABILITY: float = 0.1 # Chance to change drift direction
 
     # Typo simulation settings
-    TYPO_PROBABILITY: float = 0.02         # 2% chance of typo per character
+    TYPO_PROBABILITY: float = 0.0          # 0% = no typos (was 0.02 = 2%)
     TYPO_CORRECTION_DELAY: float = 0.15    # Pause before correcting (seconds)
     TYPO_STREAK_PROBABILITY: float = 0.35  # 35% chance of another typo after a typo
     TYPO_STREAK_DECAY: float = 0.6         # Each subsequent typo chance multiplied by this

@@ -31,7 +31,8 @@ def type_char(char: str) -> None:
     elif char == '\t':
         pyautogui.press('tab')
     elif is_ascii(char):
-        pyautogui.write(char, interval=0)
+        # Use small interval for reliable Shift key handling
+        pyautogui.write(char, interval=0.01)
     else:
         pyperclip.copy(char)
         pyautogui.hotkey('ctrl', 'v')
@@ -71,46 +72,6 @@ def get_char_modifier(char: str, prev_char: str) -> float:
         modifier *= config.MODIFIER_COMMON
 
     return modifier
-
-
-def get_typo_char(char: str) -> str | None:
-    """Get a typo character (adjacent key)."""
-    lower_char = char.lower()
-    if lower_char in config.ADJACENT_KEYS:
-        adjacent = config.ADJACENT_KEYS[lower_char]
-        typo = random.choice(adjacent)
-        return typo.upper() if char.isupper() else typo
-    return None
-
-
-def correct_typos(typo_buffer: list[tuple[str, str]], min_delay: float, max_delay: float) -> None:
-    """Correct all buffered typos at once (backspace all, then retype correct).
-
-    Args:
-        typo_buffer: List of (typed_wrong, correct_char) tuples
-        min_delay: Min delay for timing
-        max_delay: Max delay for timing
-    """
-    if not typo_buffer:
-        return
-
-    # Pause before realizing the mistake
-    time.sleep(config.TYPO_CORRECTION_DELAY)
-
-    # Backspace for each typo
-    for _ in typo_buffer:
-        pyautogui.press('backspace')
-        time.sleep(get_base_delay(min_delay, max_delay))
-
-    # Small pause after deleting
-    time.sleep(get_base_delay(min_delay, max_delay) * 0.5)
-
-    # Retype correct characters
-    for _, correct_char in typo_buffer:
-        type_char(correct_char)
-        time.sleep(get_base_delay(min_delay, max_delay) * 0.8)
-
-    typo_buffer.clear()
 
 
 def list_windows(quiet: bool = False) -> list:
@@ -190,37 +151,13 @@ def human_type(text: str, min_delay: float, max_delay: float, quiet: bool = Fals
     """
     total = len(text)
     prev_char = ''
-    typo_streak = 0.0  # Probability boost for consecutive typos
-    typo_buffer: list[tuple[str, str]] = []  # [(typed_wrong, correct), ...]
     # Rhythm: typing speed drifts over time
     rhythm = 1.0
     rhythm_direction = random.choice([-1, 1])
 
     for i, char in enumerate(text):
-        # Decide whether to make a typo (considering streak)
-        effective_probability = config.TYPO_PROBABILITY + typo_streak
-        should_typo = char.isalnum() and random.random() < effective_probability
-
-        if should_typo:
-            # Try to make a typo
-            typo_char = get_typo_char(char)
-            if typo_char:
-                type_char(typo_char)
-                typo_buffer.append((typo_char, char))
-                typo_streak = config.TYPO_STREAK_PROBABILITY
-            else:
-                # No adjacent key, type normally
-                type_char(char)
-                typo_streak *= config.TYPO_STREAK_DECAY
-        else:
-            # Not making typo - correct any buffered typos first
-            if typo_buffer:
-                correct_typos(typo_buffer, min_delay, max_delay)
-            type_char(char)
-            typo_streak *= config.TYPO_STREAK_DECAY
-
-        if typo_streak < 0.01:
-            typo_streak = 0.0
+        # Type the character
+        type_char(char)
 
         if not quiet:
             percent = int((i + 1) / total * 100)
@@ -248,10 +185,6 @@ def human_type(text: str, min_delay: float, max_delay: float, quiet: bool = Fals
             time.sleep(pause)
 
         prev_char = char
-
-    # Correct any remaining typos at the end
-    if typo_buffer:
-        correct_typos(typo_buffer, min_delay, max_delay)
 
     if not quiet:
         print("\nDone!")
